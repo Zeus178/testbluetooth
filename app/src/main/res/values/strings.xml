@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">TestPrinter</string>
+    <string name="cardconnect_qa_post_url">https://qa.cardconnect.com</string>
+    <string name="cardconnect_prod_post_url">https://fts.cardconnect.com:6443</string>
+</resources>
