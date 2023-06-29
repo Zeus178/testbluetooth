@@ -1,9 +1,9 @@
 package com.example.testprinter
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,79 +12,54 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.AdapterView.OnItemClickListener
+import android.widget.ArrayAdapter
+import android.widget.ListView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.bolt.consumersdk.CCConsumer
-import com.bolt.consumersdk.CCConsumerTokenCallback
 import com.bolt.consumersdk.domain.CCConsumerAccount
 import com.bolt.consumersdk.domain.CCConsumerError
-import com.bolt.consumersdk.listeners.BluetoothSearchResponseListener
+import com.bolt.consumersdk.swiper.CCSwiperController
 import com.bolt.consumersdk.swiper.SwiperControllerListener
 import com.bolt.consumersdk.swiper.enums.BatteryState
+import com.bolt.consumersdk.swiper.enums.SwiperCaptureMode
 import com.bolt.consumersdk.swiper.enums.SwiperError
 import com.bolt.consumersdk.swiper.enums.SwiperType
-import java.util.Collections
 
 
-class MainActivity : AppCompatActivity(), CCConsumerTokenCallback {
+class MainActivity : AppCompatActivity() {
+    private var listView: ListView? = null
+    private val mDeviceList = ArrayList<String>()
+    private var mBluetoothAdapter: BluetoothAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        val apiBridgeImpl = ApiBridgeImpl()
-//        Intent(this, PaymentAccountsActivity::class.java).also {
-//            it.putExtra(API_BRIDGE_IMPL_KEY, apiBridgeImpl)
-//            startActivityForResult(it, PAYMENT_ACTIVITY_REQUEST_CODE)
-//        }
         findViewById<TextView>(R.id.btnStart).setOnClickListener {
+            mDeviceList.clear()
+            listMac.clear()
+            listView!!.adapter = ArrayAdapter(
+                this,
+                android.R.layout.simple_list_item_1, mDeviceList
+            )
             requestPermission()
         }
-//        requestPermission()
-        val mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        mBluetoothAdapter.startDiscovery()
-
-        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
-        registerReceiver(mReceiver, filter)
-    }
-
-    private val mReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val action = intent.action
-            if (BluetoothDevice.ACTION_FOUND == action) {
-                val device = intent
-                    .getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                Log.e("Truong","Truong ${device?.name} -- ${device?.address}")
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        unregisterReceiver(mReceiver)
-        super.onDestroy()
-    }
-
-    private fun requestPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            requestMultiplePermissions.launch(arrayOf(
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT))
-        }
-        else{
-            requestMultiplePermissions.launch(arrayOf(
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN))
-        }
-
-
-    }
-
-    private var requestBluetooth = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            getBluetooth()
-        }else{
-            Log.e("Truong","Truong not per 111")
+        listView = findViewById(R.id.listView)
+        listView?.setOnItemClickListener { _, _, position, _ ->
+            val device = mBluetoothAdapter?.getRemoteDevice(listMac[position])
+            Log.e("MainActivity",if (device == null) "Device null" else "Device not null")
+            device?.createBond()
+//            CCSwiperControllerFactory().create(this, SwiperType.IDTech, swiperListener, listMac[position], false)
+            mSwiperControllerManager.setMACAddress(listMac[position])
+            mSwiperControllerManager.setContext(this@MainActivity)
+            mSwiperControllerManager.setSwiperCaptureMode(SwiperCaptureMode.SWIPE_INSERT)
+            mSwiperControllerManager.setSwiperControllerListener(swiperListener)
+            mSwiperControllerManager.setSwiperType(SwiperType.IDTech)
+            mSwiperControllerManager.connectToDevice()
+//            swiperListener.onSwiperConnected()
         }
     }
 
@@ -93,46 +68,44 @@ class MainActivity : AppCompatActivity(), CCConsumerTokenCallback {
             if (permissions.all { it.value }) {
                 getBluetooth()
             } else {
-                Log.e("Truong","Truong not per")
+                Log.e("MainActivity","MainActivity not per")
             }
         }
-    private val mapDevices = Collections.synchronizedMap(HashMap<String, BluetoothDevice>())
-    private var mBluetoothSearchResponseListener: BluetoothSearchResponseListener? = null
-    @SuppressLint("HardwareIds", "MissingPermission")
+
     private fun getBluetooth() {
-        val adp= BluetoothAdapter.getDefaultAdapter()
-//        Log.e("Truong", "Truong ${adp.name}")
-        val pairedDevices: Set<BluetoothDevice>? = adp?.bondedDevices
-        val api = CCConsumer.getInstance().api
-        Log.e("Truong", "Truong ${if (pairedDevices == null) "null" else "not null ${pairedDevices.size}"}")
-        pairedDevices?.forEach { device ->
-            val deviceName = device.name
-            val deviceHardwareAddress = device.address // MAC address
-            Log.e("Truong","Truong $deviceName -- $deviceHardwareAddress")
-            api.connectToDevice(device, this)
-            mSwiperControllerManager.setMACAddress(deviceHardwareAddress)
-            mSwiperControllerManager.setContext(this)
-            mSwiperControllerManager.setSwiperControllerListener(swiperListener)
-            mSwiperControllerManager.setSwiperType(SwiperType.IDTech)
-            mSwiperControllerManager.connectToDevice()
+        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        registerReceiver(mReceiver, filter)
+        val mBluetoothManager = getSystemService(BluetoothManager::class.java)
+        mBluetoothAdapter = mBluetoothManager.adapter
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Log.e("MainActivity","MainActivity requestPermission")
+            requestPermission()
+            return
         }
-        api.setEndPoint("https://fts.cardconnect.com:6443")
-        mSwiperControllerManager.setContext(this)
-        mSwiperControllerManager.setSwiperType(SwiperType.IDTech)
-        api.startBluetoothDeviceSearch(mBluetoothSearchResponseListener, this@MainActivity, false)
-
-
+        mBluetoothAdapter?.startDiscovery()
     }
 
-    override fun onResume() {
-        super.onResume()
-        mBluetoothSearchResponseListener =
-            BluetoothSearchResponseListener { device ->
-                Log.e("Truong","Truong")
-                synchronized(mapDevices) {
-                    mapDevices[device.address] = device
-                }
-            }
+    private fun requestPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Log.e("MainActivity","MainActivity >= Build.VERSION_CODES.S")
+            requestMultiplePermissions.launch(arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT))
+        }
+        else{
+            Log.e("MainActivity","MainActivity < Build.VERSION_CODES.S")
+            requestMultiplePermissions.launch(arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ))
+        }
+
+
     }
 
     private val mSwiperControllerManager = SwiperControllerManager().getInstance()
@@ -143,7 +116,7 @@ class MainActivity : AppCompatActivity(), CCConsumerTokenCallback {
         }
 
         override fun onError(p0: SwiperError?) {
-            Log.e("Truong","onError ${p0?.exceptionMessage}")
+            Log.e("Truong","onError ${p0?.name}")
         }
 
         override fun onSwiperReadyForCard() {
@@ -152,6 +125,7 @@ class MainActivity : AppCompatActivity(), CCConsumerTokenCallback {
 
         override fun onSwiperConnected() {
             Log.e("Truong","onSwiperConnected")
+            resetSwiper()
         }
 
         override fun onSwiperDisconnected() {
@@ -204,12 +178,54 @@ class MainActivity : AppCompatActivity(), CCConsumerTokenCallback {
 
     }
 
-    override fun onCCConsumerTokenResponseError(p0: CCConsumerError) {
-        Log.e("Truong","onCCConsumerTokenResponseError ${p0.responseMessage}")
+    private fun resetSwiper() {
+        (mSwiperControllerManager.getSwiperController() as CCSwiperController).startReaders(
+            mSwiperControllerManager.getSwiperCaptureMode()
+        )
+    }
+    private val listMac = arrayListOf<String>()
+    private val mReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+            if (BluetoothDevice.ACTION_FOUND == action) {
+                val device = if (Build.VERSION.SDK_INT >= 33) {
+                    intent
+                        .getParcelableExtra(BluetoothDevice.EXTRA_DEVICE,BluetoothDevice::class.java)
+                } else
+                    intent
+                        .getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                if (ActivityCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                    && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    requestPermission()
+                    return
+                }
+                if (device?.name != null) {
+                    mDeviceList.add("""${device.name}${device.address}""".trimIndent())
+                    listMac.add(device.address)
+                    Log.i("MainActivity", """${device.name}--${device.address}""".trimIndent())
+                }
+                listView!!.adapter = ArrayAdapter(
+                    context,
+                    android.R.layout.simple_list_item_1, mDeviceList
+                )
+            }
+        }
     }
 
-    override fun onCCConsumerTokenResponse(p0: CCConsumerAccount) {
-        Log.e("Truong","onCCConsumerTokenResponse ${p0.name}")
+
+
+    private val mOnItemClickListener =
+        OnItemClickListener { parent, view, position, id ->
+            val api = CCConsumer.getInstance().api
+
+        }
+
+    override fun onDestroy() {
+        unregisterReceiver(mReceiver)
+        super.onDestroy()
     }
 
 }

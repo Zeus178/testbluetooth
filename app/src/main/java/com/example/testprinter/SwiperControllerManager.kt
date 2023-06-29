@@ -21,7 +21,7 @@ class SwiperControllerManager {
     private var mDeviceMACAddress: String? = null
     private var mSwiperController: SwiperController? = null
     private var mSwiperControllerListener: SwiperControllerListener? = null
-    private var mSwiperCaptureMode = SwiperCaptureMode.SWIPE_INSERT
+    private var mSwiperCaptureMode = SwiperCaptureMode.SWIPE_TAP_INSERT
     private var mSwiperType = SwiperType.BBPosDevice
     private var mContext: Context? = null
     private var bConnected = false
